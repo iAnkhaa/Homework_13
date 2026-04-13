@@ -53,7 +53,7 @@ if st.session_state.waiting:
     
     with st.spinner("Хариу бичиж байна..."):
         answer = {}
-        answer['response'] = back.handle_query(last_prompt)
+        answer['response'] = back.handle_user_query(last_prompt)
         
         ##answer = back.thread_response_generator(thread_id, last_prompt)
 
