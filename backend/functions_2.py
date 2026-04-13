@@ -13,47 +13,78 @@ import os
 import openai
 import backend.functions_2 as back
 
-# --- 1. Keyword intent ---
-CONTACT_KEYWORDS = ["утас", "contact", "холбоо барих"]
-LOCATION_KEYWORDS = ["байршил", "location"]
-
-# --- 2. Safe math evaluator ---
-ops = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-}
-
-def safe_eval(node):
-    if isinstance(node, ast.Num):
-        return node.n
-    elif isinstance(node, ast.BinOp):
-        return ops[type(node.op)](safe_eval(node.left), safe_eval(node.right))
-    else:
-        raise ValueError("Invalid expression")
-
-def is_math_expression(s):
-    return re.fullmatch(r"[0-9+\-*/().\s]+", s) is not None
-
-def calculate(expr):
-    tree = ast.parse(expr, mode='eval')
-    return safe_eval(tree.body)
-
-# --- 3. Date format шалгах ---
-def is_date(s):
-    return re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) is not None
-
-# --- 4. Монгол банк API (жишээ endpoint) ---
-def get_exchange_rate(date):
-    url = f"https://api.mongolbank.mn/api/exchange-rate?start={date}&end={date}"
+def mongol_bank_khansh(date: str) -> pd.DataFrame:
+    # 1. Validate date format (YYYY-MM-DD)
     try:
-        res = requests.get(url)
-        data = res.json()
-        return data
-    except Exception:
-        return "Ханшийн мэдээлэл авахад алдаа гарлаа"
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError("Invalid date format. Expected YYYY-MM-DD")
 
+    url = f"https://www.mongolbank.mn/mn/currency-rates/data?startDate={date}&endDate={date}"
+
+    try:
+        response = requests.post(url)
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Request failed: {e}")
+
+    # 2. Check status code
+    if 400 <= response.status_code < 500:
+        raise Exception(f"Client error ({response.status_code}): Check request parameters")
+    elif 500 <= response.status_code < 600:
+        raise Exception(f"Server error ({response.status_code}): MongolBank API issue")
+
+    if response.status_code != 200:
+        raise Exception(f"Unexpected status code: {response.status_code}")
+
+    # 3. Validate JSON response
+    try:
+        data = response.json()
+    except ValueError:
+        return "API дуудхад алдаа гарлаа, хөгжүүлэгчтэй холбогдоорой"
+
+    if not data.get("success", False):
+        return "API дуудхад алдаа гарлаа. Түр хүлээгээд дахиад асуугаарай"
+
+    if "data" not in data:
+        return "Тухайн өдрийн ханшийн мэдээлэл байхгүй байна"
+
+    return pd.DataFrame(data["data"])
+
+def handle_user_query(user_query: str):
+    if not isinstance(user_query, str):
+        return "Invalid input"
+
+    query = user_query.strip()
+    query_lower = query.lower()
+
+    # 1. Contact шалгах
+    if any(word in query_lower for word in ["утас", "contact", "холбоо барих", "holbodgoh medeelel"]):
+        return "Манай холбоо барих утасны дугаар: 99887766"
+
+    # 2. Location шалгах
+    if any(word in query_lower for word in ["байршил", "location"]):
+        return "Манай байршил: Galaxy tower 7 давхар, 705 тоот"
+
+    # 3. Date format шалгах (YYYY-MM-DD)
+    date_pattern = r"^\d{4}-\d{2}-\d{2}$"
+    if re.match(date_pattern, query):
+        try:
+            return mongol_bank_khansh(query)
+        except Exception as e:
+            return str(e)
+
+    # 4. Math expression гэж үзэх оролдлого
+    # (зөвхөн math тэмдэгтүүд байгаа эсэхийг шалгана)
+    math_pattern = r"^[\d+\-*/().\s^]+$"
+    if re.match(math_pattern, query):
+        try:
+            return eval_expr(query)
+        except Exception as e:
+            return str(e)
+
+    # 5. Default → 그대로 буцаана
+    return user_query
+  
 # --- MAIN ROUTER ---
 def handle_query(user_query: str):
     q = user_query.lower()
@@ -79,3 +110,4 @@ def handle_query(user_query: str):
 
     # 5. Default
     return user_query
+
