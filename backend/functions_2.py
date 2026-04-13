@@ -89,6 +89,8 @@ def handle_user_query(user_query: str):
 def handle_query(user_query: str):
     q = user_query.lower()
 
+    contact_keywords = ["утас", "utas", "dugaar", "contact", "холбоо барих", ]
+    keywords_location = ["байршил", "location", "bairshil"]
     # 1. Contact
     if any(k in q for k in CONTACT_KEYWORDS):
         return "Манай холбоо барих утасны дугаар: 99887766"
