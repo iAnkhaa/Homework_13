@@ -1,1 +1,9 @@
-
+requests
+pandas
+streamlit
+numpy
+openai
+pypdf
+pdf2image
+pytesseract
+pillow
